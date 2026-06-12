@@ -25,6 +25,7 @@ let communityMissCounts = new Array(TOTAL).fill(0);
 let communityTotal = 0;
 let cells = [];
 
+/* ========== TẤT CẢ CÁC TỔ HỢP MISS (C(16,4)) ========== */
 function generateAllMissCombos() {
     const combos = [];
     const combine = (start, cur) => {
@@ -35,6 +36,7 @@ function generateAllMissCombos() {
     return combos;
 }
 
+/* ========== TRỌNG SỐ DỰA TRÊN DỮ LIỆU CỘNG ĐỒNG ========== */
 function computeWeights(missSets, communityData) {
     if (!communityData || communityData.total === 0) return missSets.map(s => ({ missSet: s, weight: 1 }));
     const { counts, total } = communityData;
@@ -102,6 +104,7 @@ function findBest() {
     return best;
 }
 
+/* ========== UI ========== */
 function buildGrid() {
     const gridEl = document.getElementById('gridContainer');
     gridEl.innerHTML = '';
@@ -238,9 +241,11 @@ function renderHeatmap() {
     div.innerHTML = html;
 }
 
+/* ========== FIREBASE DATA ========== */
 function submitPatternToCommunity(missArray) {
-    push(patternsRef, { misses: missArray, timestamp: Date.now() });
-    showToast('✅ Đã gửi pattern lên đám mây! Cảm ơn bạn! 🌍');
+    push(patternsRef, { misses: missArray, timestamp: Date.now() })
+        .then(() => showToast('✅ Đã gửi pattern lên đám mây! Cảm ơn bạn! 🌍'))
+        .catch(err => showToast('Lỗi gửi pattern: ' + err.message, 'warning'));
 }
 
 function listenCommunityData() {
@@ -271,7 +276,7 @@ function showToast(msg, type = '') {
     setTimeout(() => t.classList.remove('show'), 2000);
 }
 
-// ========== IMPORT / EXPORT ==========
+/* ========== IMPORT / EXPORT ========== */
 function exportData() {
     get(patternsRef).then((snapshot) => {
         const data = snapshot.val();
@@ -294,12 +299,12 @@ function exportData() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         showToast('📤 Đã export ' + patterns.length + ' pattern!', 'success');
-    }).catch(() => showToast('Lỗi khi export', 'warning'));
+    }).catch(err => showToast('Lỗi khi export: ' + err.message, 'warning'));
 }
 
-function importData(file) {
+async function importData(file) {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
         try {
             const json = JSON.parse(e.target.result);
             if (!json.patterns || !Array.isArray(json.patterns)) throw new Error('Sai định dạng');
@@ -308,20 +313,37 @@ function importData(file) {
                 showToast('Không có pattern hợp lệ trong file', 'warning');
                 return;
             }
-            let imported = 0;
-            newPatterns.forEach(p => {
-                push(patternsRef, { misses: p.slice().sort((a,b)=>a-b), timestamp: Date.now() });
-                imported++;
+            const pushPromises = newPatterns.map(p => {
+                const sortedMisses = p.slice().sort((a, b) => a - b);
+                return push(patternsRef, { misses: sortedMisses, timestamp: Date.now() });
             });
-            showToast(`📥 Đã import ${imported} pattern vào cộng đồng!`, 'success');
+            const results = await Promise.allSettled(pushPromises);
+            const successCount = results.filter(r => r.status === 'fulfilled').length;
+            const failCount = results.filter(r => r.status === 'rejected').length;
+            if (failCount > 0) {
+                results.forEach((r, i) => {
+                    if (r.status === 'rejected') console.error(`Import lỗi pattern ${i}:`, r.reason);
+                });
+                showToast(`⚠️ Đã import ${successCount}/${newPatterns.length} pattern. ${failCount} lỗi (xem console)`, 'warning');
+            } else {
+                showToast(`📥 Đã import thành công ${successCount} pattern vào cộng đồng!`, 'success');
+            }
         } catch (err) {
             showToast('❌ File không đúng định dạng JSON', 'warning');
+            console.error(err);
         }
     };
     reader.readAsText(file);
 }
 
-// ========== EVENT LISTENERS ==========
+function testDatabaseConnection() {
+    const testRef = ref(db, 'testConnection');
+    push(testRef, { msg: 'test', timestamp: Date.now() })
+        .then(() => showToast('✅ Kết nối Firebase hoạt động!', 'success'))
+        .catch(err => showToast('❌ Lỗi kết nối: ' + err.message, 'warning'));
+}
+
+/* ========== EVENT LISTENERS ========== */
 function setupEvents() {
     document.getElementById('btnModeHit').addEventListener('click', () => {
         clickMode = 'hit';
@@ -372,6 +394,7 @@ function setupEvents() {
             e.target.value = '';
         }
     });
+    document.getElementById('btnTestConnection').addEventListener('click', testDatabaseConnection);
 
     document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
