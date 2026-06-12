@@ -6,7 +6,6 @@
     <title>Sweet Cinema · Cộng đồng Toàn cầu</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
 <div class="app">
@@ -29,6 +28,7 @@
                 <button class="btn small" id="btnUndo">↩ Undo</button>
                 <button class="btn small" id="btnReset">🔄 Reset</button>
                 <button class="btn small accent" id="btnSavePattern" disabled>💾 Lưu & Gửi lên Cloud</button>
+                <button class="btn small gold" id="btnApplyTop" title="Áp dụng pattern phổ biến nhất hiện tại">⭐ Top Pattern</button>
             </div>
         </div>
 
@@ -59,15 +59,24 @@
     </div>
 
     <div class="gallery-section">
-        <div style="font-family:'Orbitron',sans-serif; letter-spacing:1px; color:var(--gold); margin-bottom:10px;">📜 SỨC MẠNH CỘNG ĐỒNG (Firebase Realtime)</div>
+        <div style="font-family:'Orbitron',sans-serif; letter-spacing:1px; color:var(--gold); margin-bottom:10px;">📜 SỨC MẠNH CỘNG ĐỒNG</div>
         <div id="heatmapContainer">
             <div style="text-align:center; color:var(--text2);">Đang kết nối dữ liệu đám mây...</div>
+        </div>
+        <div style="margin-top:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="color:var(--gold); font-weight:700;">🏆 Top Pattern được gửi nhiều</span>
+                <span id="topPatternInfo" style="font-size:0.7rem; color:var(--text2);"></span>
+            </div>
+            <div id="topPatternsList" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; justify-content:center;">
+                <!-- JS sẽ điền -->
+            </div>
         </div>
         <div class="community-actions">
             <button class="btn small" id="btnExport">📤 Export JSON</button>
             <button class="btn small" id="btnImport">📥 Import JSON</button>
-            <button class="btn small" id="btnTestConnection">🔌 Test Connection</button>
             <input type="file" id="importFileInput" accept=".json" style="display:none;">
+            <button class="btn small" id="btnExportSession">📋 Export phiên này</button>
         </div>
         <div style="text-align:center; margin-top:10px; font-size:0.75rem; color:var(--text2);">
             🌍 Dữ liệu được chia sẻ bởi tất cả người chơi · Cập nhật realtime
@@ -75,20 +84,10 @@
     </div>
 </div>
 
-<!-- Modal xác nhận gửi pattern + reCAPTCHA -->
-<div id="confirmModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000; justify-content:center; align-items:center;">
-    <div style="background:var(--surface); border-radius:20px; padding:30px; border:1px solid var(--gold); max-width:400px; width:90%;">
-        <h3 style="color:var(--gold); margin-bottom:10px;">📤 Xác nhận gửi pattern</h3>
-        <p style="margin-bottom:15px;">Pattern của bạn sẽ được chia sẻ lên cộng đồng. Đảm bảo bạn đã xác định đúng 4 ô XỊT.</p>
-        <div id="recaptchaContainer" style="display:flex; justify-content:center; margin-bottom:15px;"></div>
-        <div style="display:flex; gap:10px; justify-content:flex-end;">
-            <button class="btn small" id="btnCancelSend">Hủy</button>
-            <button class="btn small accent" id="btnConfirmSend" disabled>Gửi</button>
-        </div>
-    </div>
-</div>
-
 <div class="toast" id="toast"></div>
+<!-- Tooltip entropy (ẩn) -->
+<div id="cellTooltip" style="position:fixed; background:#1a1a2e; border:1px solid var(--accent); border-radius:8px; padding:6px 10px; font-size:0.75rem; color:#fff; pointer-events:none; z-index:2000; display:none;"></div>
+
 <script type="module" src="script.js"></script>
 </body>
 </html>
