@@ -293,7 +293,7 @@ function openConfirmModal(missArray) {
 
     if (!recaptchaWidgetId) {
         recaptchaWidgetId = grecaptcha.render('recaptchaContainer', {
-            'sitekey': '6LehVxstAAAAAB9Jmomqzs87G40ni7e2728W5CUP',
+            'sitekey': '6LcYXxstAAAAAPY4z_Xh2XQJDC9djnkZ-JhCSXuR',
             'callback': onRecaptchaSuccess,
             'expired-callback': onRecaptchaExpired
         });
