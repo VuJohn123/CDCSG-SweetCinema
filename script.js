@@ -357,11 +357,9 @@ async function importData(file) {
 
             let newPatterns = [];
             for (const p of json.patterns) {
-                // Định dạng 1: mảng 4 số
                 if (Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL)) {
                     newPatterns.push({ misses: p.slice().sort((a,b)=>a-b), timestamp: Date.now() });
                 }
-                // Định dạng 2: object { misses: [...], timestamp: ... } (timestamp có thể có hoặc không)
                 else if (p && typeof p === 'object' && Array.isArray(p.misses) && p.misses.length === MISS && p.misses.every(n => n >= 0 && n < TOTAL)) {
                     const sortedMisses = p.misses.slice().sort((a,b)=>a-b);
                     const timestamp = (typeof p.timestamp === 'number') ? p.timestamp : Date.now();
@@ -398,10 +396,9 @@ async function importData(file) {
         }
     };
     reader.readAsText(file);
-}}
+}
 
 function testDatabaseConnection() {
-    // Rule mới chặn /testConnection, nhưng ta vẫn giữ nút để người dùng thấy lỗi (sẽ báo permission_denied)
     const testRef = ref(db, 'testConnection');
     push(testRef, { msg: 'test', timestamp: Date.now() })
         .then(() => showToast('✅ Kết nối Firebase hoạt động!', 'success'))
