@@ -124,3 +124,38 @@ body {
     .grid-4x4 { grid-template-columns:repeat(4, var(--cell-size-mobile)); grid-template-rows:repeat(4, var(--cell-size-mobile)); }
     .cell { width:var(--cell-size-mobile); height:var(--cell-size-mobile); font-size:0.7rem; }
 }
+#topPatternsList .top-pattern-item {
+    background:var(--surface2);
+    border-radius:12px;
+    padding:6px 10px;
+    cursor:pointer;
+    border:2px solid transparent;
+    transition:0.15s;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:0.8rem;
+}
+#topPatternsList .top-pattern-item:hover {
+    border-color:var(--gold);
+    transform:scale(1.02);
+}
+.top-pattern-item .mini-grid-sm {
+    display:grid;
+    grid-template-columns:repeat(4, 14px);
+    grid-template-rows:repeat(4, 14px);
+    gap:1px;
+    background:#000;
+    padding:2px;
+    border-radius:4px;
+}
+.top-pattern-item .mini-cell-sm {
+    border-radius:2px;
+    background:#1e1e38;
+}
+.top-pattern-item .mini-cell-sm.miss {
+    background:#ff1744;
+}
+#cellTooltip {
+    box-shadow:0 4px 15px rgba(0,0,0,0.6);
+}
