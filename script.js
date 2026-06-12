@@ -28,8 +28,11 @@ let cells = [];
 let lastSubmitTime = 0;
 const SUBMIT_COOLDOWN = 5000;
 const MAX_IMPORT_PATTERNS = 50;
-let recaptchaWidgetId = null;
-let pendingMisses = null;
+
+let sessionPatterns = [];
+try {
+    sessionPatterns = JSON.parse(localStorage.getItem('sweetSessionPatterns') || '[]');
+} catch(e) { sessionPatterns = []; }
 
 /* ========== GAME LOGIC ========== */
 function generateAllMissCombos() {
@@ -201,13 +204,30 @@ function update() {
     document.getElementById('singleAlert').style.display = validPatterns.length === 1 ? 'block' : 'none';
     renderGallery();
     document.getElementById('btnSavePattern').disabled = !(validPatterns.length === 1 || (missCount === MISS && validPatterns.length >= 1));
+
+    // gắn tooltip
+    cells.forEach((cell, i) => {
+        if (gridState[i] !== 0) {
+            cell.removeEventListener('mouseenter', tooltipHandler);
+            cell.removeEventListener('mouseleave', hideTooltipHandler);
+            return;
+        }
+        cell.removeEventListener('mouseenter', tooltipHandler);
+        cell.removeEventListener('mouseleave', hideTooltipHandler);
+        cell.addEventListener('mouseenter', (e) => showCellTooltip(e, i));
+        cell.addEventListener('mouseleave', hideCellTooltip);
+    });
+
+    renderTopPatterns();
 }
 
 function renderGallery() {
     const gal = document.getElementById('galleryGrid');
     document.getElementById('galleryCount').textContent = `Hiển thị ${validPatterns.length} pattern`;
     gal.innerHTML = '';
-    validPatterns.slice(0, 150).forEach(p => {
+    // Sắp xếp giảm dần theo weight
+    const sorted = [...validPatterns].sort((a,b) => b.weight - a.weight);
+    sorted.slice(0, 150).forEach(p => {
         const mini = document.createElement('div');
         mini.className = 'mini-grid';
         for (let i = 0; i < TOTAL; i++) {
@@ -253,7 +273,10 @@ function submitPatternToCommunity(missArray) {
     }
     lastSubmitTime = now;
     push(patternsRef, { misses: missArray, timestamp: now })
-        .then(() => showToast('✅ Đã gửi pattern lên đám mây! Cảm ơn bạn! 🌍'))
+        .then(() => {
+            showToast('✅ Đã gửi pattern lên đám mây! Cảm ơn bạn! 🌍');
+            addToSession(missArray);
+        })
         .catch(err => showToast('Lỗi gửi pattern: ' + err.message, 'warning'));
 }
 
@@ -261,20 +284,26 @@ function listenCommunityData() {
     onValue(patternsRef, (snapshot) => {
         const data = snapshot.val();
         const counts = new Array(TOTAL).fill(0);
+        const patternCountMap = new Map();
         let total = 0;
         if (data) {
             Object.values(data).forEach(entry => {
-                if (entry.misses && Array.isArray(entry.misses)) {
-                    entry.misses.forEach(idx => { if (idx >= 0 && idx < TOTAL) counts[idx]++; });
+                if (entry.misses && Array.isArray(entry.misses) && entry.misses.length === MISS) {
+                    const sorted = entry.misses.slice().sort((a,b)=>a-b);
+                    const key = sorted.join(',');
+                    patternCountMap.set(key, (patternCountMap.get(key) || 0) + 1);
+                    sorted.forEach(idx => { if (idx >= 0 && idx < TOTAL) counts[idx]++; });
                     total++;
                 }
             });
         }
         communityMissCounts = counts;
         communityTotal = total;
+        window._communityPatternCounts = patternCountMap;
         refreshPatterns();
         update();
         renderHeatmap();
+        renderTopPatterns();
     });
 }
 
@@ -285,41 +314,100 @@ function showToast(msg, type = '') {
     setTimeout(() => t.classList.remove('show'), 2000);
 }
 
-/* ========== MODAL + RECAPTCHA ========== */
-function openConfirmModal(missArray) {
-    pendingMisses = missArray;
-    document.getElementById('confirmModal').style.display = 'flex';
-    document.getElementById('btnConfirmSend').disabled = true;
-
-    if (!recaptchaWidgetId) {
-        recaptchaWidgetId = grecaptcha.render('recaptchaContainer', {
-            'sitekey': '6LcYXxstAAAAAPY4z_Xh2XQJDC9djnkZ-JhCSXuR',
-            'callback': onRecaptchaSuccess,
-            'expired-callback': onRecaptchaExpired
+/* ========== TOP PATTERNS ========== */
+function renderTopPatterns() {
+    const container = document.getElementById('topPatternsList');
+    const infoSpan = document.getElementById('topPatternInfo');
+    const map = window._communityPatternCounts;
+    if (!map || map.size === 0) {
+        container.innerHTML = '<div style="color:var(--text2); font-size:0.8rem;">Chưa có dữ liệu.</div>';
+        infoSpan.textContent = '';
+        return;
+    }
+    const sorted = Array.from(map.entries()).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    infoSpan.textContent = `(từ ${communityTotal} mẫu)`;
+    container.innerHTML = '';
+    sorted.forEach(([key, count]) => {
+        const misses = key.split(',').map(Number);
+        const item = document.createElement('div');
+        item.className = 'top-pattern-item';
+        item.innerHTML = `<span style="font-weight:700;">${count} lần</span>`;
+        const miniGrid = document.createElement('div');
+        miniGrid.className = 'mini-grid-sm';
+        for (let i=0; i<TOTAL; i++) {
+            const mc = document.createElement('div');
+            mc.className = 'mini-cell-sm';
+            if (misses.includes(i)) mc.classList.add('miss');
+            miniGrid.appendChild(mc);
+        }
+        item.appendChild(miniGrid);
+        item.addEventListener('click', () => {
+            if (misses.some(i => gridState[i] === 1)) {
+                showToast('Pattern xung đột với Hit đã đánh dấu', 'warning');
+                return;
+            }
+            pushHistory();
+            misses.forEach(i => { if (gridState[i] === 0) gridState[i] = 2; });
+            update();
         });
-    } else {
-        grecaptcha.reset(recaptchaWidgetId);
+        container.appendChild(item);
+    });
+}
+
+/* ========== SESSION HISTORY ========== */
+function addToSession(missArray) {
+    const sorted = missArray.slice().sort((a,b)=>a-b);
+    if (!sessionPatterns.some(p => p.length===4 && p.every((v,i)=>v===sorted[i]))) {
+        sessionPatterns.push(sorted);
+        localStorage.setItem('sweetSessionPatterns', JSON.stringify(sessionPatterns));
     }
 }
 
-function onRecaptchaSuccess() {
-    document.getElementById('btnConfirmSend').disabled = false;
+function exportSession() {
+    if (sessionPatterns.length === 0) {
+        showToast('Chưa có pattern nào trong phiên này.', 'warning');
+        return;
+    }
+    const json = JSON.stringify({ patterns: sessionPatterns }, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sweet-session-export.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('📋 Đã xuất phiên làm việc!', 'success');
 }
 
-function onRecaptchaExpired() {
-    document.getElementById('btnConfirmSend').disabled = true;
+/* ========== TOOLTIP ========== */
+let tooltipHandler = null;
+let hideTooltipHandler = null;
+
+function showCellTooltip(event, index) {
+    const tooltip = document.getElementById('cellTooltip');
+    const ig = getCellInformationGain(index);
+    tooltip.innerHTML = `Mở ô này: IG = ${ig.toFixed(3)} bit`;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (event.clientX + 15) + 'px';
+    tooltip.style.top = (event.clientY + 15) + 'px';
 }
 
-function closeConfirmModal() {
-    document.getElementById('confirmModal').style.display = 'none';
-    grecaptcha.reset(recaptchaWidgetId);
-    pendingMisses = null;
+function hideCellTooltip() {
+    document.getElementById('cellTooltip').style.display = 'none';
 }
 
-function confirmedSubmit() {
-    if (!pendingMisses) return;
-    submitPatternToCommunity(pendingMisses);
-    closeConfirmModal();
+function getCellInformationGain(index) {
+    if (validPatterns.length <= 1) return 0;
+    const curEnt = entropy(validPatterns);
+    const missPats = validPatterns.filter(p => p.missSet.has(index));
+    const hitPats = validPatterns.filter(p => !p.missSet.has(index));
+    const totalW = validPatterns.reduce((s,p)=>s+p.weight,0);
+    const pMiss = missPats.reduce((s,p)=>s+p.weight,0)/totalW;
+    const pHit = 1 - pMiss;
+    const expEnt = (missPats.length ? pMiss * entropy(missPats) : 0) + (hitPats.length ? pHit * entropy(hitPats) : 0);
+    return curEnt - expEnt;
 }
 
 /* ========== IMPORT / EXPORT ========== */
@@ -353,17 +441,31 @@ async function importData(file) {
     reader.onload = async (e) => {
         try {
             const json = JSON.parse(e.target.result);
-            if (!json.patterns || !Array.isArray(json.patterns)) throw new Error('Sai định dạng');
-
             let newPatterns = [];
-            for (const p of json.patterns) {
-                if (Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL)) {
-                    newPatterns.push({ misses: p.slice().sort((a,b)=>a-b), timestamp: Date.now() });
+
+            // Định dạng 1: { "patterns": [ [5,10,14,15], ... ] }
+            if (json.patterns && Array.isArray(json.patterns)) {
+                for (const p of json.patterns) {
+                    if (Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL)) {
+                        newPatterns.push({ misses: p.slice().sort((a,b)=>a-b), timestamp: Date.now() });
+                    }
+                    else if (p && typeof p === 'object' && Array.isArray(p.misses) && p.misses.length === MISS && p.misses.every(n => n >= 0 && n < TOTAL)) {
+                        const sortedMisses = p.misses.slice().sort((a,b)=>a-b);
+                        const timestamp = (typeof p.timestamp === 'number') ? p.timestamp : Date.now();
+                        newPatterns.push({ misses: sortedMisses, timestamp });
+                    }
                 }
-                else if (p && typeof p === 'object' && Array.isArray(p.misses) && p.misses.length === MISS && p.misses.every(n => n >= 0 && n < TOTAL)) {
-                    const sortedMisses = p.misses.slice().sort((a,b)=>a-b);
-                    const timestamp = (typeof p.timestamp === 'number') ? p.timestamp : Date.now();
-                    newPatterns.push({ misses: sortedMisses, timestamp });
+            }
+            // Định dạng 2: { "rounds": [ [1,1,1,1,1,1,1,1,0,0,1,0,0,1,0,1], ... ] }
+            else if (json.rounds && Array.isArray(json.rounds)) {
+                for (const round of json.rounds) {
+                    if (Array.isArray(round) && round.length === TOTAL && round.filter(v => v === 0).length === MISS) {
+                        const misses = [];
+                        round.forEach((val, idx) => { if (val === 0) misses.push(idx); });
+                        if (misses.length === MISS) {
+                            newPatterns.push({ misses: misses.sort((a,b)=>a-b), timestamp: Date.now() });
+                        }
+                    }
                 }
             }
 
@@ -398,13 +500,27 @@ async function importData(file) {
     reader.readAsText(file);
 }
 
-function testDatabaseConnection() {
-    const testRef = ref(db, 'testConnection');
-    push(testRef, { msg: 'test', timestamp: Date.now() })
-        .then(() => showToast('✅ Kết nối Firebase hoạt động!', 'success'))
-        .catch(err => showToast('❌ Lỗi kết nối: ' + err.message, 'warning'));
+/* ========== APPLY TOP PATTERN ========== */
+function applyTopPattern() {
+    const map = window._communityPatternCounts;
+    if (!map || map.size === 0) {
+        showToast('Chưa có dữ liệu cộng đồng.', 'warning');
+        return;
+    }
+    const sorted = Array.from(map.entries()).sort((a,b)=>b[1]-a[1]);
+    const topKey = sorted[0][0];
+    const misses = topKey.split(',').map(Number);
+    if (misses.some(i => gridState[i] === 1)) {
+        showToast('Top pattern xung đột với Hit hiện tại.', 'warning');
+        return;
+    }
+    pushHistory();
+    misses.forEach(i => { if (gridState[i] === 0) gridState[i] = 2; });
+    update();
+    showToast(`Đã áp dụng pattern top 1 (${sorted[0][1]} lần)`, 'success');
 }
 
+/* ========== EVENT SETUP ========== */
 function setupEvents() {
     document.getElementById('btnModeHit').addEventListener('click', () => {
         clickMode = 'hit';
@@ -442,12 +558,9 @@ function setupEvents() {
             showToast('Cần xác định chính xác 4 ô XỊT', 'warning');
             return;
         }
-        openConfirmModal(misses);
+        submitPatternToCommunity(misses);
     });
-
-    document.getElementById('btnCancelSend').addEventListener('click', closeConfirmModal);
-    document.getElementById('btnConfirmSend').addEventListener('click', confirmedSubmit);
-
+    document.getElementById('btnApplyTop').addEventListener('click', applyTopPattern);
     document.getElementById('btnExport').addEventListener('click', exportData);
     document.getElementById('btnImport').addEventListener('click', () => {
         document.getElementById('importFileInput').click();
@@ -458,13 +571,14 @@ function setupEvents() {
             e.target.value = '';
         }
     });
-    document.getElementById('btnTestConnection').addEventListener('click', testDatabaseConnection);
+    document.getElementById('btnExportSession').addEventListener('click', exportSession);
 
     document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
     });
 }
 
+// Khởi tạo
 buildGrid();
 listenCommunityData();
 refreshPatterns();
