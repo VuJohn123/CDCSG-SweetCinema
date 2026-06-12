@@ -25,7 +25,14 @@ let communityMissCounts = new Array(TOTAL).fill(0);
 let communityTotal = 0;
 let cells = [];
 
-/* ========== TẤT CẢ CÁC TỔ HỢP MISS (C(16,4)) ========== */
+// Biến giới hạn
+let lastSubmitTime = 0;
+const SUBMIT_COOLDOWN = 5000; // 5 giây
+const MAX_IMPORT_PATTERNS = 50;
+let recaptchaWidgetId = null;
+let pendingMisses = null; // lưu tạm pattern khi mở modal
+
+/* ========== CÁC HÀM GAME (giữ nguyên như trước) ========== */
 function generateAllMissCombos() {
     const combos = [];
     const combine = (start, cur) => {
@@ -36,7 +43,6 @@ function generateAllMissCombos() {
     return combos;
 }
 
-/* ========== TRỌNG SỐ DỰA TRÊN DỮ LIỆU CỘNG ĐỒNG ========== */
 function computeWeights(missSets, communityData) {
     if (!communityData || communityData.total === 0) return missSets.map(s => ({ missSet: s, weight: 1 }));
     const { counts, total } = communityData;
@@ -104,7 +110,6 @@ function findBest() {
     return best;
 }
 
-/* ========== UI ========== */
 function buildGrid() {
     const gridEl = document.getElementById('gridContainer');
     gridEl.innerHTML = '';
@@ -243,7 +248,13 @@ function renderHeatmap() {
 
 /* ========== FIREBASE DATA ========== */
 function submitPatternToCommunity(missArray) {
-    push(patternsRef, { misses: missArray, timestamp: Date.now() })
+    const now = Date.now();
+    if (now - lastSubmitTime < SUBMIT_COOLDOWN) {
+        showToast('Vui lòng đợi 5 giây trước khi gửi lại.', 'warning');
+        return;
+    }
+    lastSubmitTime = now;
+    push(patternsRef, { misses: missArray, timestamp: now })
         .then(() => showToast('✅ Đã gửi pattern lên đám mây! Cảm ơn bạn! 🌍'))
         .catch(err => showToast('Lỗi gửi pattern: ' + err.message, 'warning'));
 }
@@ -276,7 +287,45 @@ function showToast(msg, type = '') {
     setTimeout(() => t.classList.remove('show'), 2000);
 }
 
-/* ========== IMPORT / EXPORT ========== */
+/* ========== MODAL + RECAPTCHA ========== */
+function openConfirmModal(missArray) {
+    pendingMisses = missArray;
+    document.getElementById('confirmModal').style.display = 'flex';
+    document.getElementById('btnConfirmSend').disabled = true; // sẽ bật khi reCAPTCHA solved
+
+    // Nếu chưa render reCAPTCHA thì render
+    if (!recaptchaWidgetId) {
+        recaptchaWidgetId = grecaptcha.render('recaptchaContainer', {
+            'sitekey': 'YOUR_SITE_KEY',  // <-- THAY BẰNG SITE KEY CỦA BẠN
+            'callback': onRecaptchaSuccess,
+            'expired-callback': onRecaptchaExpired
+        });
+    } else {
+        grecaptcha.reset(recaptchaWidgetId);
+    }
+}
+
+function onRecaptchaSuccess() {
+    document.getElementById('btnConfirmSend').disabled = false;
+}
+
+function onRecaptchaExpired() {
+    document.getElementById('btnConfirmSend').disabled = true;
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+    grecaptcha.reset(recaptchaWidgetId);
+    pendingMisses = null;
+}
+
+function confirmedSubmit() {
+    if (!pendingMisses) return;
+    submitPatternToCommunity(pendingMisses);
+    closeConfirmModal();
+}
+
+/* ========== IMPORT / EXPORT (có giới hạn) ========== */
 function exportData() {
     get(patternsRef).then((snapshot) => {
         const data = snapshot.val();
@@ -308,10 +357,10 @@ async function importData(file) {
         try {
             const json = JSON.parse(e.target.result);
             if (!json.patterns || !Array.isArray(json.patterns)) throw new Error('Sai định dạng');
-            const newPatterns = json.patterns.filter(p => Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL));
-            if (newPatterns.length === 0) {
-                showToast('Không có pattern hợp lệ trong file', 'warning');
-                return;
+            let newPatterns = json.patterns.filter(p => Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL));
+            if (newPatterns.length > MAX_IMPORT_PATTERNS) {
+                showToast(`⚠️ Chỉ được import tối đa ${MAX_IMPORT_PATTERNS} pattern/lần.`, 'warning');
+                newPatterns = newPatterns.slice(0, MAX_IMPORT_PATTERNS);
             }
             const pushPromises = newPatterns.map(p => {
                 const sortedMisses = p.slice().sort((a, b) => a - b);
@@ -321,9 +370,7 @@ async function importData(file) {
             const successCount = results.filter(r => r.status === 'fulfilled').length;
             const failCount = results.filter(r => r.status === 'rejected').length;
             if (failCount > 0) {
-                results.forEach((r, i) => {
-                    if (r.status === 'rejected') console.error(`Import lỗi pattern ${i}:`, r.reason);
-                });
+                results.forEach((r, i) => { if (r.status === 'rejected') console.error(`Import lỗi pattern ${i}:`, r.reason); });
                 showToast(`⚠️ Đã import ${successCount}/${newPatterns.length} pattern. ${failCount} lỗi (xem console)`, 'warning');
             } else {
                 showToast(`📥 Đã import thành công ${successCount} pattern vào cộng đồng!`, 'success');
@@ -337,6 +384,7 @@ async function importData(file) {
 }
 
 function testDatabaseConnection() {
+    // Sau khi rule mới chặn /testConnection, nút này có thể không cần, nhưng vẫn giữ để test rule
     const testRef = ref(db, 'testConnection');
     push(testRef, { msg: 'test', timestamp: Date.now() })
         .then(() => showToast('✅ Kết nối Firebase hoạt động!', 'success'))
@@ -370,6 +418,8 @@ function setupEvents() {
     });
     document.getElementById('btnUndo').addEventListener('click', undo);
     document.getElementById('btnReset').addEventListener('click', reset);
+
+    // Nút "Lưu & Gửi" mở modal reCAPTCHA thay vì gửi trực tiếp
     document.getElementById('btnSavePattern').addEventListener('click', () => {
         let misses;
         if (validPatterns.length === 1) {
@@ -381,8 +431,12 @@ function setupEvents() {
             showToast('Cần xác định chính xác 4 ô XỊT', 'warning');
             return;
         }
-        submitPatternToCommunity(misses);
+        openConfirmModal(misses);
     });
+
+    // Modal events
+    document.getElementById('btnCancelSend').addEventListener('click', closeConfirmModal);
+    document.getElementById('btnConfirmSend').addEventListener('click', confirmedSubmit);
 
     document.getElementById('btnExport').addEventListener('click', exportData);
     document.getElementById('btnImport').addEventListener('click', () => {
@@ -401,7 +455,7 @@ function setupEvents() {
     });
 }
 
-// INIT
+// Khởi tạo
 buildGrid();
 listenCommunityData();
 refreshPatterns();
