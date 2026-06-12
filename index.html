@@ -141,12 +141,11 @@
     </div>
 
     <div class="main-layout">
-        <!-- Grid Panel -->
         <div class="grid-panel">
             <div class="grid-4x4" id="gridContainer"></div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
                 <div id="modeToggle" style="display:flex; border-radius:30px; overflow:hidden; border:1px solid var(--border); background:var(--surface2);">
-                    <button id="btnModeHit" class="active" style="padding:9px 18px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-weight:600;">✅ Hit</button>
+                    <button id="btnModeHit" class="active" style="padding:9px 18px; border:none; background:var(--accent); color:#fff; cursor:pointer; font-weight:600;">✅ Hit</button>
                     <button id="btnModeMiss" style="padding:9px 18px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-weight:600;">❌ Miss</button>
                 </div>
                 <button class="btn gold" id="btnSuggest">💡 Gợi ý ô tốt nhất</button>
@@ -158,7 +157,6 @@
             </div>
         </div>
 
-        <!-- Info Panel -->
         <div class="info-panel">
             <div style="font-family:'Orbitron',sans-serif; font-size:0.8rem; letter-spacing:2px; color:var(--accent2);">📊 THỐNG KÊ</div>
             <div class="stat-item"><span>Tổng pattern:</span><span class="stat-value">1820</span></div>
@@ -171,13 +169,12 @@
             </div>
             <div style="margin-top:4px; font-size:0.78rem; color:var(--text2);">Xác suất MISS các ô:</div>
             <div class="mini-prob-list" id="miniProbList"></div>
-            <div id="singleAlert" style="display:none; background:#1a1a00; border:2px solid #ffd740; border-radius:12px; padding:12px; text-align:center; animation:found-flash 0.8s infinite;">
+            <div id="singleAlert" style="display:none; background:#1a1a00; border:2px solid #ffd740; border-radius:12px; padding:12px; text-align:center;">
                 🎉 ĐÃ XÁC ĐỊNH PATTERN DUY NHẤT!
             </div>
         </div>
     </div>
 
-    <!-- Gallery -->
     <div class="gallery-section">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <span style="font-family:'Orbitron',sans-serif; letter-spacing:1px; color:var(--gold);">🖼️ THƯ VIỆN PATTERN (còn lại)</span>
@@ -186,7 +183,6 @@
         <div class="gallery-grid" id="galleryGrid"></div>
     </div>
 
-    <!-- Community Heatmap -->
     <div class="gallery-section">
         <div style="font-family:'Orbitron',sans-serif; letter-spacing:1px; color:var(--gold); margin-bottom:10px;">📜 SỨC MẠNH CỘNG ĐỒNG (Firebase Realtime)</div>
         <div id="heatmapContainer">
@@ -201,7 +197,6 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
-    // ========== FIREBASE MODULAR SDK ==========
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js";
     import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/12.14.0/firebase-database.js";
 
@@ -219,9 +214,8 @@
     const db = getDatabase(app);
     const patternsRef = ref(db, 'patterns');
 
-    // ========== GAME LOGIC ==========
     const TOTAL = 16, MISS = 4, GRID = 4;
-    let gridState = new Array(TOTAL).fill(0); // 0=unknown, 1=hit, 2=miss
+    let gridState = new Array(TOTAL).fill(0);
     let historyStack = [];
     let clickMode = 'hit';
     let allPatterns = [];
@@ -306,7 +300,6 @@
         return best;
     }
 
-    // ========== UI ELEMENTS ==========
     const gridEl = document.getElementById('gridContainer');
     let cells = [];
 
@@ -385,7 +378,6 @@
             document.getElementById('bestCellInfo').style.display = 'none';
         }
 
-        // Mini prob list
         const list = document.getElementById('miniProbList');
         list.innerHTML = '';
         for (let i = 0; i < TOTAL; i++) {
@@ -479,16 +471,19 @@
         setTimeout(() => t.classList.remove('show'), 2000);
     }
 
-    // ========== EVENT LISTENERS ==========
     document.getElementById('btnModeHit').addEventListener('click', () => {
         clickMode = 'hit';
-        document.getElementById('btnModeHit').classList.add('active');
-        document.getElementById('btnModeMiss').classList.remove('active');
+        document.getElementById('btnModeHit').style.background = 'var(--accent)';
+        document.getElementById('btnModeHit').style.color = '#fff';
+        document.getElementById('btnModeMiss').style.background = 'transparent';
+        document.getElementById('btnModeMiss').style.color = 'var(--text2)';
     });
     document.getElementById('btnModeMiss').addEventListener('click', () => {
         clickMode = 'miss';
-        document.getElementById('btnModeMiss').classList.add('active');
-        document.getElementById('btnModeHit').classList.remove('active');
+        document.getElementById('btnModeMiss').style.background = 'var(--accent)';
+        document.getElementById('btnModeMiss').style.color = '#fff';
+        document.getElementById('btnModeHit').style.background = 'transparent';
+        document.getElementById('btnModeHit').style.color = 'var(--text2)';
     });
     document.getElementById('btnSuggest').addEventListener('click', () => {
         const best = findBest();
@@ -519,7 +514,6 @@
         if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
     });
 
-    // ========== INIT ==========
     buildGrid();
     listenCommunityData();
     refreshPatterns();
