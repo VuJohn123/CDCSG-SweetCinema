@@ -25,14 +25,13 @@ let communityMissCounts = new Array(TOTAL).fill(0);
 let communityTotal = 0;
 let cells = [];
 
-// Biến giới hạn
 let lastSubmitTime = 0;
-const SUBMIT_COOLDOWN = 5000; // 5 giây
+const SUBMIT_COOLDOWN = 5000;
 const MAX_IMPORT_PATTERNS = 50;
 let recaptchaWidgetId = null;
-let pendingMisses = null; // lưu tạm pattern khi mở modal
+let pendingMisses = null;
 
-/* ========== CÁC HÀM GAME (giữ nguyên như trước) ========== */
+/* ========== GAME LOGIC ========== */
 function generateAllMissCombos() {
     const combos = [];
     const combine = (start, cur) => {
@@ -246,7 +245,6 @@ function renderHeatmap() {
     div.innerHTML = html;
 }
 
-/* ========== FIREBASE DATA ========== */
 function submitPatternToCommunity(missArray) {
     const now = Date.now();
     if (now - lastSubmitTime < SUBMIT_COOLDOWN) {
@@ -291,12 +289,11 @@ function showToast(msg, type = '') {
 function openConfirmModal(missArray) {
     pendingMisses = missArray;
     document.getElementById('confirmModal').style.display = 'flex';
-    document.getElementById('btnConfirmSend').disabled = true; // sẽ bật khi reCAPTCHA solved
+    document.getElementById('btnConfirmSend').disabled = true;
 
-    // Nếu chưa render reCAPTCHA thì render
     if (!recaptchaWidgetId) {
         recaptchaWidgetId = grecaptcha.render('recaptchaContainer', {
-            'sitekey': 'YOUR_SITE_KEY',  // <-- THAY BẰNG SITE KEY CỦA BẠN
+            'sitekey': '6LehVxstAAAAAB9Jmomqzs87G40ni7e2728W5CUP',
             'callback': onRecaptchaSuccess,
             'expired-callback': onRecaptchaExpired
         });
@@ -325,7 +322,7 @@ function confirmedSubmit() {
     closeConfirmModal();
 }
 
-/* ========== IMPORT / EXPORT (có giới hạn) ========== */
+/* ========== IMPORT / EXPORT ========== */
 function exportData() {
     get(patternsRef).then((snapshot) => {
         const data = snapshot.val();
@@ -384,14 +381,13 @@ async function importData(file) {
 }
 
 function testDatabaseConnection() {
-    // Sau khi rule mới chặn /testConnection, nút này có thể không cần, nhưng vẫn giữ để test rule
+    // Rule mới chặn /testConnection, nhưng ta vẫn giữ nút để người dùng thấy lỗi (sẽ báo permission_denied)
     const testRef = ref(db, 'testConnection');
     push(testRef, { msg: 'test', timestamp: Date.now() })
         .then(() => showToast('✅ Kết nối Firebase hoạt động!', 'success'))
         .catch(err => showToast('❌ Lỗi kết nối: ' + err.message, 'warning'));
 }
 
-/* ========== EVENT LISTENERS ========== */
 function setupEvents() {
     document.getElementById('btnModeHit').addEventListener('click', () => {
         clickMode = 'hit';
@@ -418,8 +414,6 @@ function setupEvents() {
     });
     document.getElementById('btnUndo').addEventListener('click', undo);
     document.getElementById('btnReset').addEventListener('click', reset);
-
-    // Nút "Lưu & Gửi" mở modal reCAPTCHA thay vì gửi trực tiếp
     document.getElementById('btnSavePattern').addEventListener('click', () => {
         let misses;
         if (validPatterns.length === 1) {
@@ -434,7 +428,6 @@ function setupEvents() {
         openConfirmModal(misses);
     });
 
-    // Modal events
     document.getElementById('btnCancelSend').addEventListener('click', closeConfirmModal);
     document.getElementById('btnConfirmSend').addEventListener('click', confirmedSubmit);
 
@@ -455,7 +448,6 @@ function setupEvents() {
     });
 }
 
-// Khởi tạo
 buildGrid();
 listenCommunityData();
 refreshPatterns();
