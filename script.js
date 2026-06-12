@@ -354,20 +354,40 @@ async function importData(file) {
         try {
             const json = JSON.parse(e.target.result);
             if (!json.patterns || !Array.isArray(json.patterns)) throw new Error('Sai định dạng');
-            let newPatterns = json.patterns.filter(p => Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL));
+
+            let newPatterns = [];
+            for (const p of json.patterns) {
+                // Định dạng 1: mảng 4 số
+                if (Array.isArray(p) && p.length === MISS && p.every(n => n >= 0 && n < TOTAL)) {
+                    newPatterns.push({ misses: p.slice().sort((a,b)=>a-b), timestamp: Date.now() });
+                }
+                // Định dạng 2: object { misses: [...], timestamp: ... } (timestamp có thể có hoặc không)
+                else if (p && typeof p === 'object' && Array.isArray(p.misses) && p.misses.length === MISS && p.misses.every(n => n >= 0 && n < TOTAL)) {
+                    const sortedMisses = p.misses.slice().sort((a,b)=>a-b);
+                    const timestamp = (typeof p.timestamp === 'number') ? p.timestamp : Date.now();
+                    newPatterns.push({ misses: sortedMisses, timestamp });
+                }
+            }
+
+            if (newPatterns.length === 0) {
+                showToast('Không có pattern hợp lệ trong file', 'warning');
+                return;
+            }
+
             if (newPatterns.length > MAX_IMPORT_PATTERNS) {
                 showToast(`⚠️ Chỉ được import tối đa ${MAX_IMPORT_PATTERNS} pattern/lần.`, 'warning');
                 newPatterns = newPatterns.slice(0, MAX_IMPORT_PATTERNS);
             }
-            const pushPromises = newPatterns.map(p => {
-                const sortedMisses = p.slice().sort((a, b) => a - b);
-                return push(patternsRef, { misses: sortedMisses, timestamp: Date.now() });
-            });
+
+            const pushPromises = newPatterns.map(item => push(patternsRef, item));
             const results = await Promise.allSettled(pushPromises);
             const successCount = results.filter(r => r.status === 'fulfilled').length;
             const failCount = results.filter(r => r.status === 'rejected').length;
+
             if (failCount > 0) {
-                results.forEach((r, i) => { if (r.status === 'rejected') console.error(`Import lỗi pattern ${i}:`, r.reason); });
+                results.forEach((r, i) => {
+                    if (r.status === 'rejected') console.error(`Import lỗi pattern ${i}:`, r.reason);
+                });
                 showToast(`⚠️ Đã import ${successCount}/${newPatterns.length} pattern. ${failCount} lỗi (xem console)`, 'warning');
             } else {
                 showToast(`📥 Đã import thành công ${successCount} pattern vào cộng đồng!`, 'success');
@@ -378,7 +398,7 @@ async function importData(file) {
         }
     };
     reader.readAsText(file);
-}
+}}
 
 function testDatabaseConnection() {
     // Rule mới chặn /testConnection, nhưng ta vẫn giữ nút để người dùng thấy lỗi (sẽ báo permission_denied)
